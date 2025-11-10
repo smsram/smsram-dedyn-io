@@ -2,58 +2,18 @@
 const nextConfig = {
   images: {
     remotePatterns: [
+      // YouTube static thumbnails
       { protocol: 'https', hostname: 'img.youtube.com', pathname: '/vi/**' },
       { protocol: 'https', hostname: 'i.ytimg.com', pathname: '/vi/**' },
+      // If you ever proxy or build thumbs differently, keep these too:
       { protocol: 'https', hostname: 'i.ytimg.com', pathname: '/**' },
       { protocol: 'https', hostname: 'img.youtube.com', pathname: '/**' },
+      // Optional: allow youtu.be if you end up resolving images via that host
       { protocol: 'https', hostname: 'youtu.be', pathname: '/**' },
+      // Optional: full youtube domain if needed
       { protocol: 'https', hostname: 'www.youtube.com', pathname: '/**' },
       { protocol: 'https', hostname: 'youtube.com', pathname: '/**' },
     ],
-  },
-
-  async redirects() {
-    return [
-      // Redirect main domain’s /dashboard → app subdomain
-      {
-        source: '/dashboard',
-        has: [
-          {
-            type: 'host',
-            value: 'smsram.dedyn.io',
-          },
-        ],
-        destination: 'https://app.smsram.dedyn.io',
-        permanent: false,
-      },
-    ]
-  },
-
-  async rewrites() {
-    return [
-      // When visiting app.smsram.dedyn.io, show /dashboard page content
-      {
-        source: '/',
-        has: [
-          {
-            type: 'host',
-            value: 'app.smsram.dedyn.io',
-          },
-        ],
-        destination: '/dashboard', // internally render /dashboard
-      },
-      // Make sure all subpaths also work (like /settings, /profile, etc.)
-      {
-        source: '/:path*',
-        has: [
-          {
-            type: 'host',
-            value: 'app.smsram.dedyn.io',
-          },
-        ],
-        destination: '/dashboard/:path*',
-      },
-    ]
   },
 }
 
