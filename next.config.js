@@ -14,6 +14,7 @@ const nextConfig = {
 
   async rewrites() {
     return [
+      // 👇 When visiting app.smsram.dedyn.io, internally serve /dashboard
       {
         source: '/',
         has: [
@@ -24,6 +25,7 @@ const nextConfig = {
         ],
         destination: '/dashboard',
       },
+      // Allow all other normal routes
     ]
   },
 }
