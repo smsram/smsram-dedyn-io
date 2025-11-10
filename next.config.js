@@ -12,9 +12,26 @@ const nextConfig = {
     ],
   },
 
+  async redirects() {
+    return [
+      // 👇 Redirect /dashboard on main domain → app subdomain (same content)
+      {
+        source: '/dashboard',
+        has: [
+          {
+            type: 'host',
+            value: 'smsram.dedyn.io',
+          },
+        ],
+        destination: 'https://app.smsram.dedyn.io',
+        permanent: false, // use true if you want a permanent 308 redirect
+      },
+    ]
+  },
+
   async rewrites() {
     return [
-      // 👇 When visiting app.smsram.dedyn.io, internally serve /dashboard
+      // 👇 app subdomain should render /dashboard internally
       {
         source: '/',
         has: [
@@ -25,7 +42,6 @@ const nextConfig = {
         ],
         destination: '/dashboard',
       },
-      // Allow all other normal routes
     ]
   },
 }
