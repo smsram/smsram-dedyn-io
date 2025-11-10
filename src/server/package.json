@@ -1,19 +1,35 @@
 {
   "name": "api-server",
-  "version": "1.0.0",
-  "description": "API Server with Turso SQLite",
+  "version": "1.1.0",
+  "description": "API Server with Express and Turso SQLite (Render Ready)",
   "main": "app.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js"
+    "start": "node app.js",                              
+    "dev": "nodemon app.js",
+    "build": "echo 'No build step required for Express server'"
   },
   "dependencies": {
     "@libsql/client": "^0.5.0",
-    "express": "^4.18.2",
+    "express": "^4.19.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
-  }
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "keywords": [
+    "express",
+    "api",
+    "turso",
+    "sqlite",
+    "libsql",
+    "render",
+    "backend"
+  ],
+  "author": "Meher Siva Ram (SMSRam)",
+  "license": "MIT"
 }
