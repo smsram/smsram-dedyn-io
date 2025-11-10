@@ -1,18 +1,57 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { Search, Film } from 'lucide-react'
-import { videosData } from '@/data/mockData'
+import { Search, Film, RotateCw } from 'lucide-react'
 import VideoCard from '@/app/components/dashboard/VideoCard'
+import LoadingSpinner from '@/app/components/ui/LoadingSpinner'
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL
 
 export default function Videos() {
   const [searchTerm, setSearchTerm] = useState('')
+  const [videos, setVideos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const filteredVideos = videosData.filter(video =>
-    video.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    video.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const fetchVideos = async (query = '') => {
+    setLoading(true)
+    setError('')
+    try {
+      const url = query
+        ? `${BASE_URL}/dashboard/videos?search=${encodeURIComponent(query)}`
+        : `${BASE_URL}/dashboard/videos`
+      const res = await fetch(url)
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load videos')
+      }
+
+      setVideos(Array.isArray(data.data) ? data.data : [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message || 'Failed to load videos')
+      setVideos([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    // initial load
+    fetchVideos()
+  }, [])
+
+  const filteredVideos = useMemo(() => {
+    if (!searchTerm) return videos
+    const term = searchTerm.toLowerCase()
+    return videos.filter(
+      (v) =>
+        (v.title || '').toLowerCase().includes(term) ||
+        (v.description || '').toLowerCase().includes(term)
+    )
+  }, [videos, searchTerm])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -61,18 +100,35 @@ export default function Videos() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') fetchVideos(searchTerm)
+            }}
           />
           {searchTerm && (
             <motion.button
               className="search-clear"
-              onClick={() => setSearchTerm('')}
+              onClick={() => {
+                setSearchTerm('')
+                fetchVideos('')
+              }}
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
               type="button"
+              title="Clear search"
             >
               ✕
             </motion.button>
           )}
+          <motion.button
+            className="search-refresh"
+            onClick={() => fetchVideos(searchTerm)}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.95 }}
+            type="button"
+            title="Refresh"
+          >
+            <RotateCw size={18} />
+          </motion.button>
         </div>
       </motion.div>
 
@@ -81,28 +137,63 @@ export default function Videos() {
         <h2 className="section-title">
           {searchTerm ? `Results (${filteredVideos.length})` : 'All Videos'}
         </h2>
-        <span className="result-count">{filteredVideos.length} available</span>
+        <span className="result-count">
+          {loading ? 'Loading...' : `${filteredVideos.length} available`}
+        </span>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="error-banner">
+          <span>{error}</span>
+          <button onClick={() => fetchVideos(searchTerm)}>Retry</button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && !error && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '400px',
+            padding: '2rem',
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textAlign: 'center'
+          }}
+        >
+          <LoadingSpinner message="Loading videos..." />
+        </motion.div>
+      )}
+
       {/* Videos Grid */}
-      <motion.div 
-        className="videos-grid"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {filteredVideos.map((video) => (
-          <motion.div 
-            key={video.id}
-            variants={itemVariants}
-          >
-            <VideoCard video={video} />
-          </motion.div>
-        ))}
-      </motion.div>
+      {!loading && !error && (
+        <motion.div 
+          className="videos-grid"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {filteredVideos.map((video) => (
+            <motion.div 
+              key={video.id}
+              variants={itemVariants}
+            >
+              <VideoCard video={video} />
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
 
       {/* Empty State */}
-      {filteredVideos.length === 0 && (
+      {!loading && !error && filteredVideos.length === 0 && (
         <motion.div 
           className="empty-state"
           initial={{ opacity: 0, y: 20 }}
@@ -114,7 +205,10 @@ export default function Videos() {
           <p className="empty-state-subtitle">Try searching with different keywords</p>
           <motion.button
             className="empty-state-btn"
-            onClick={() => setSearchTerm('')}
+            onClick={() => {
+              setSearchTerm('')
+              fetchVideos('')
+            }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >

@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Mail, MessageSquare, Send, Github, Youtube, Instagram, MapPin, Phone, Clock, ArrowRight } from 'lucide-react'
-import Link from 'next/link'
+import { Mail, MessageSquare, Send, Github, Youtube, Instagram, Clock, ArrowRight } from 'lucide-react'
+import { useNotification } from '@/app/components/ui/NotificationContext'
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -12,8 +14,8 @@ export default function Contact() {
     subject: '',
     message: ''
   })
-  const [submitted, setSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { showNotification } = useNotification()
 
   const handleChange = (e) => {
     setFormData({
@@ -26,24 +28,53 @@ export default function Contact() {
     e.preventDefault()
     setIsLoading(true)
     
-    // Simulate form submission
-    setTimeout(() => {
-      setSubmitted(true)
+    try {
+      const response = await fetch(`${BASE_URL}/mail/contact`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to send message')
+      }
+
+      // Show success notification (fixed at top)
+      showNotification({
+        type: 'success',
+        title: 'Message Sent Successfully!',
+        message: 'Thank you for reaching out. We\'ll get back to you soon.',
+        duration: 5000
+      })
+
+      // Clear form
       setFormData({ name: '', email: '', subject: '', message: '' })
-      setIsLoading(false)
+    } catch (err) {
+      console.error('Error sending message:', err)
       
-      // Reset success message after 5 seconds
-      setTimeout(() => setSubmitted(false), 5000)
-    }, 1500)
+      // Show error notification (fixed at top)
+      showNotification({
+        type: 'error',
+        title: 'Failed to Send Message',
+        message: err.message || 'Please try again later.',
+        duration: 5000
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const contactInfo = [
     {
       icon: Mail,
       title: 'Email Us',
-      content: 'contact@smsram.com',
+      content: 'meher@smsram.dedyn.io',
       description: 'Send us an email anytime, we usually respond within 24 hours',
-      link: 'mailto:contact@smsram.com'
+      link: 'mailto:meher@smsram.dedyn.io'
     },
     {
       icon: MessageSquare,
@@ -144,19 +175,6 @@ export default function Contact() {
             <p>Fill out the form below and we'll get back to you as soon as possible.</p>
           </div>
 
-          {submitted && (
-            <motion.div 
-              className="success-message"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="success-icon">✓</div>
-              <h3>Message Sent Successfully!</h3>
-              <p>Thank you for reaching out. We'll get back to you soon.</p>
-            </motion.div>
-          )}
-
           <form onSubmit={handleSubmit} className="contact-form">
             <div className="form-group">
               <label htmlFor="name">Full Name</label>
@@ -169,6 +187,7 @@ export default function Contact() {
                 required
                 placeholder="Your name"
                 className="form-input"
+                disabled={isLoading}
               />
             </div>
 
@@ -183,6 +202,7 @@ export default function Contact() {
                 required
                 placeholder="your.email@example.com"
                 className="form-input"
+                disabled={isLoading}
               />
             </div>
 
@@ -197,6 +217,7 @@ export default function Contact() {
                 required
                 placeholder="What is this about?"
                 className="form-input"
+                disabled={isLoading}
               />
             </div>
 
@@ -211,6 +232,7 @@ export default function Contact() {
                 rows={6}
                 placeholder="Your message..."
                 className="form-textarea"
+                disabled={isLoading}
               />
             </div>
 
@@ -218,8 +240,8 @@ export default function Contact() {
               type="submit"
               className="submit-btn"
               disabled={isLoading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: isLoading ? 1 : 1.02 }}
+              whileTap={{ scale: isLoading ? 1 : 0.98 }}
             >
               {isLoading ? (
                 <>

@@ -2,21 +2,61 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
-import { ExternalLink, Github } from 'lucide-react'
+import { Github } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SourceCodeCard({ code }) {
   const [formattedDate, setFormattedDate] = useState('')
+  const [technologies, setTechnologies] = useState([])
 
   // Format date on client only to avoid hydration mismatch
   useEffect(() => {
-    const date = new Date(code.lastUpdated)
-    setFormattedDate(date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    }))
-  }, [code.lastUpdated])
+    if (code.updated_at) {
+      const date = new Date(code.updated_at)
+      setFormattedDate(date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }))
+    }
+  }, [code.updated_at])
+
+  // Safely parse technologies JSON - handles all formats
+  useEffect(() => {
+    if (!code.technologies) {
+      setTechnologies([])
+      return
+    }
+
+    try {
+      // If it's already an array, use it directly
+      if (Array.isArray(code.technologies)) {
+        setTechnologies(code.technologies)
+        return
+      }
+
+      // If it's a string, try to parse as JSON
+      if (typeof code.technologies === 'string') {
+        // Try JSON parse first
+        try {
+          const parsed = JSON.parse(code.technologies)
+          setTechnologies(Array.isArray(parsed) ? parsed : [String(parsed)])
+          return
+        } catch {
+          // If JSON parse fails, try comma-separated fallback
+          const split = code.technologies.split(',').map(tech => tech.trim()).filter(Boolean)
+          setTechnologies(split)
+          return
+        }
+      }
+
+      // If it's an object but not array, convert to array
+      setTechnologies([String(code.technologies)])
+    } catch (error) {
+      console.warn('Failed to parse technologies:', code.technologies, error)
+      setTechnologies([])
+    }
+  }, [code.technologies])
 
   return (
     <motion.div 
@@ -26,7 +66,10 @@ export default function SourceCodeCard({ code }) {
     >
       {/* Header Section */}
       <div className="sourcecode-header">
-        <Link href={`/dashboard/source-codes/${code.id}`} className="sourcecode-title-link">
+        <Link 
+          href={`/dashboard/source-codes/${code.id}`} 
+          className="sourcecode-title-link"
+        >
           <motion.h3 
             className="sourcecode-title"
             whileHover={{ color: 'var(--accent-orange)' }}
@@ -39,16 +82,27 @@ export default function SourceCodeCard({ code }) {
 
       {/* Tech Tags */}
       <div className="sourcecode-tech">
-        {code.technologies.map((tech, index) => (
-          <motion.span 
-            key={index} 
-            className="tech-tag"
-            whileHover={{ y: -2 }}
-            transition={{ duration: 0.2 }}
-          >
-            {tech}
-          </motion.span>
-        ))}
+        {technologies.length > 0 ? (
+          technologies.slice(0, 5).map((tech, index) => (
+            <motion.span 
+              key={index} 
+              className="tech-tag"
+              whileHover={{ y: -2 }}
+              transition={{ duration: 0.2 }}
+            >
+              {tech}
+            </motion.span>
+          ))
+        ) : (
+          <div className="tech-placeholder">
+            No technologies listed
+          </div>
+        )}
+        {technologies.length > 5 && (
+          <span className="tech-tag tech-tag-more">
+            +{technologies.length - 5}
+          </span>
+        )}
       </div>
 
       {/* Meta Information */}
@@ -62,12 +116,15 @@ export default function SourceCodeCard({ code }) {
 
       {/* Actions */}
       <div className="sourcecode-actions">
-        <Link href={`/dashboard/source-codes/${code.id}`} className="action-btn view-btn">
+        <Link 
+          href={`/dashboard/source-codes/${code.id}`} 
+          className="action-btn view-btn"
+        >
           View Details
         </Link>
-        {code.githubUrl && (
+        {code.github_url && (
           <motion.a 
-            href={code.githubUrl} 
+            href={code.github_url} 
             target="_blank" 
             rel="noopener noreferrer"
             className="action-btn github-btn"

@@ -7,8 +7,8 @@ import requests
 OWNER = "smsram"
 REPO = "smsram-figma-ui-code"
 BRANCH = "main"
-SUBDIR = "project-black-dashboard"  # only include files under this folder
-OUTPUT_FILE = "project-black-dashboard_files.txt"
+SUBDIR = "project-black-mainpage"  # only include files under this folder
+OUTPUT_FILE = "project-black-mainpage_files.txt"
 
 API_URL = f"https://api.github.com/repos/{OWNER}/{REPO}/zipball/{BRANCH}"
 TOKEN = os.getenv("GITHUB_TOKEN")  # optional but recommended for reliability

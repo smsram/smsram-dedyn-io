@@ -1,22 +1,59 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
-import { Eye, Code, ExternalLink, Video, Search } from 'lucide-react'
+import { Eye, Code, ExternalLink, Video } from 'lucide-react'
 import Link from 'next/link'
-import { videosData } from '@/data/mockData'
 import StatCard from '../components/dashboard/StatCard'
 import VideoCard from '../components/dashboard/VideoCard'
+import SourceCodeCard from '../components/dashboard/SourceCodeCard'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL
 
 export default function Dashboard() {
-  const [searchTerm, setSearchTerm] = useState('')
+  const [stats, setStats] = useState({ videos: 0, sourceCodes: 0, totalViews: 0 })
+  const [latestVideos, setLatestVideos] = useState([])
+  const [latestSourceCodes, setLatestSourceCodes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  // Get latest 6 videos or filter by search
-  const videosToDisplay = searchTerm 
-    ? videosData.filter(video =>
-        video.title.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : videosData.slice(0, 6)
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true)
+      setError('')
+      
+      try {
+        // Fetch stats and latest content in parallel
+        const [statsRes, latestRes] = await Promise.all([
+          fetch(`${BASE_URL}/dashboard/stats`),
+          fetch(`${BASE_URL}/dashboard/latest`),
+        ])
+
+        const statsData = await statsRes.json()
+        const latestData = await latestRes.json()
+
+        if (!statsRes.ok || !statsData.success) {
+          throw new Error('Failed to fetch statistics')
+        }
+
+        if (!latestRes.ok || !latestData.success) {
+          throw new Error('Failed to fetch latest content')
+        }
+
+        setStats(statsData.data)
+        setLatestVideos(latestData.data.videos)
+        setLatestSourceCodes(latestData.data.sourceCodes)
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err)
+        setError(err.message || 'Failed to load dashboard')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -37,6 +74,33 @@ export default function Dashboard() {
     }
   }
 
+  // Format views count
+  const formatViews = (views) => {
+    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`
+    if (views >= 1000) return `${(views / 1000).toFixed(1)}K`
+    return views.toString()
+  }
+
+  if (loading) {
+    return (
+      <div className="dashboard-page">
+        <LoadingSpinner message="Loading dashboard..." />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="dashboard-page">
+        <div className="error-container">
+          <h2>Failed to load dashboard</h2>
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()}>Retry</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="dashboard-page">
       <motion.div 
@@ -49,6 +113,7 @@ export default function Dashboard() {
         <p className="page-subtitle">Welcome to SMSRam - Your source for web development tutorials</p>
       </motion.div>
 
+      {/* Stats Grid */}
       <motion.div 
         className="stats-grid"
         variants={containerVariants}
@@ -58,7 +123,7 @@ export default function Dashboard() {
         <motion.div variants={itemVariants}>
           <StatCard 
             icon={Video}
-            value="48"
+            value={stats.videos.toString()}
             label="Total Videos"
             variant="orange"
           />
@@ -67,7 +132,7 @@ export default function Dashboard() {
         <motion.div variants={itemVariants}>
           <StatCard 
             icon={Code}
-            value="32"
+            value={stats.sourceCodes.toString()}
             label="Source Codes"
             variant="purple"
           />
@@ -76,89 +141,69 @@ export default function Dashboard() {
         <motion.div variants={itemVariants}>
           <StatCard 
             icon={Eye}
-            value="1.2M"
+            value={formatViews(stats.totalViews)}
             label="Total Views"
             variant="cyan"
           />
         </motion.div>
       </motion.div>
 
-      {/* Search Bar Section */}
-      <motion.div 
-        className="search-container"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-      >
-        <div className="search-box">
-          <Search size={20} />
-          <input
-            type="text"
-            placeholder="Search videos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          {searchTerm && (
-            <motion.button
-              className="search-clear"
-              onClick={() => setSearchTerm('')}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              type="button"
-            >
-              ✕
-            </motion.button>
-          )}
-        </div>
-      </motion.div>
-
-      {/* Section Header */}
+      {/* Latest Videos Section */}
       <div className="section-header">
-        <h2 className="section-title">
-          {searchTerm ? `Search Results (${videosToDisplay.length})` : 'Latest Videos'}
-        </h2>
-        {!searchTerm && (
-          <Link href="/dashboard/videos" className="section-link">
-            View All <ExternalLink size={16} />
-          </Link>
-        )}
+        <h2 className="section-title">Latest Videos</h2>
+        <Link href="/dashboard/videos" className="section-link">
+          View All <ExternalLink size={16} />
+        </Link>
       </div>
 
-      {/* Videos Grid */}
       <motion.div 
         className="videos-grid"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-        {videosToDisplay.map((video) => (
+        {latestVideos.map((video) => (
           <motion.div key={video.id} variants={itemVariants}>
             <VideoCard video={video} />
           </motion.div>
         ))}
       </motion.div>
 
-      {/* Empty State */}
-      {searchTerm && videosToDisplay.length === 0 && (
-        <motion.div 
-          className="empty-state"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <Search size={48} className="empty-state-icon" />
-          <p className="empty-state-title">No videos found</p>
-          <p className="empty-state-subtitle">Try searching with different keywords</p>
-          <motion.button
-            className="empty-state-btn"
-            onClick={() => setSearchTerm('')}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Clear Search
-          </motion.button>
-        </motion.div>
+      {latestVideos.length === 0 && (
+        <div className="empty-state">
+          <Video size={48} className="empty-state-icon" />
+          <p className="empty-state-title">No videos yet</p>
+          <p className="empty-state-subtitle">Check back later for new content</p>
+        </div>
+      )}
+
+      {/* Latest Source Codes Section */}
+      <div className="section-header" style={{ marginTop: '3rem' }}>
+        <h2 className="section-title">Latest Source Codes</h2>
+        <Link href="/dashboard/source-codes" className="section-link">
+          View All <ExternalLink size={16} />
+        </Link>
+      </div>
+
+      <motion.div 
+        className="sourcecodes-grid"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {latestSourceCodes.map((code) => (
+          <motion.div key={code.id} variants={itemVariants}>
+            <SourceCodeCard code={code} />
+          </motion.div>
+        ))}
+      </motion.div>
+
+      {latestSourceCodes.length === 0 && (
+        <div className="empty-state">
+          <Code size={48} className="empty-state-icon" />
+          <p className="empty-state-title">No source codes yet</p>
+          <p className="empty-state-subtitle">Check back later for new content</p>
+        </div>
       )}
     </div>
   )

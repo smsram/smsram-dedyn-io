@@ -1,26 +1,27 @@
-'use client'
+"use client";
 
-import { useState, useCallback } from 'react'
-import './style.css'
-import TopBar from '../components/dashboard/TopBar'
-import Sidebar from '../components/dashboard/Sidebar'
+import { useState, useCallback } from "react";
+import "./style.css";
+import TopBar from "../components/dashboard/TopBar";
+import Sidebar from "../components/dashboard/Sidebar";
+import { NotificationProvider } from "../components/ui/NotificationContext";
 
 export default function DashboardLayout({ children }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleMenuToggle = useCallback((isOpen) => {
-    setIsSidebarOpen(isOpen)
+    setIsSidebarOpen(isOpen);
     if (isOpen) {
-      document.body.classList.add('no-scroll')
+      document.body.classList.add("no-scroll");
     } else {
-      document.body.classList.remove('no-scroll')
+      document.body.classList.remove("no-scroll");
     }
-  }, [])
+  }, []);
 
   const handleSidebarClose = useCallback(() => {
-    setIsSidebarOpen(false)
-    document.body.classList.remove('no-scroll')
-  }, [])
+    setIsSidebarOpen(false);
+    document.body.classList.remove("no-scroll");
+  }, []);
 
   return (
     <div className="layout-container">
@@ -28,9 +29,11 @@ export default function DashboardLayout({ children }) {
       <div className="layout-content">
         <Sidebar isOpen={isSidebarOpen} onClose={handleSidebarClose} />
         <main className="main-content">
-          {children}
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
         </main>
       </div>
     </div>
-  )
+  );
 }

@@ -1,27 +1,72 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { Search, Briefcase, Filter } from 'lucide-react'
-import { projectsData } from '@/data/mockData'
+import { Search, Briefcase, RefreshCw, Filter } from 'lucide-react'
 import ProjectCard from '@/app/components/dashboard/ProjectCard'
+import LoadingSpinner from '@/app/components/ui/LoadingSpinner'
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL
 
 export default function Projects() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const filteredProjects = projectsData.filter(project => {
-    const matchesSearch = 
-      project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.technologies.some(tech => 
-        tech.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchProjects = async (query = '', status = 'all') => {
+    setLoading(true)
+    setError('')
+    try {
+      const params = new URLSearchParams()
+      if (query) params.append('search', query)
+      if (status !== 'all') params.append('status', status)
+
+      const url = `${BASE_URL}/dashboard/projects${params.toString() ? `?${params}` : ''}`
+      
+      const res = await fetch(url)
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load projects')
+      }
+
+      setProjects(Array.isArray(data.data) ? data.data : [])
+    } catch (err) {
+      console.error('Error fetching projects:', err)
+      setError(err.message || 'Failed to load projects')
+      setProjects([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    // Initial load
+    fetchProjects()
+  }, [])
+
+  const filteredProjects = useMemo(() => {
+    if (!searchTerm && filterStatus === 'all') return projects
+    
+    const term = searchTerm.toLowerCase()
+    return projects.filter(project => {
+      // Check search term
+      const matchesSearch = !searchTerm || (
+        (project.title || '').toLowerCase().includes(term) ||
+        (project.description || '').toLowerCase().includes(term) ||
+        (Array.isArray(project.technologies) 
+          ? project.technologies.some(tech => (tech || '').toLowerCase().includes(term))
+          : false)
       )
-    
-    const matchesStatus = filterStatus === 'all' || project.status === filterStatus
-    
-    return matchesSearch && matchesStatus
-  })
+      
+      // Check status filter
+      const matchesStatus = filterStatus === 'all' || project.status === filterStatus
+      
+      return matchesSearch && matchesStatus
+    })
+  }, [projects, searchTerm, filterStatus])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -73,18 +118,37 @@ export default function Projects() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                fetchProjects(searchTerm, filterStatus)
+              }
+            }}
           />
           {searchTerm && (
             <motion.button
               className="search-clear"
-              onClick={() => setSearchTerm('')}
+              onClick={() => {
+                setSearchTerm('')
+                fetchProjects('', filterStatus)
+              }}
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
               type="button"
+              title="Clear search"
             >
               ✕
             </motion.button>
           )}
+          <motion.button
+            className="search-refresh"
+            onClick={() => fetchProjects(searchTerm, filterStatus)}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.95 }}
+            type="button"
+            title="Refresh"
+          >
+            <RefreshCw size={18} />
+          </motion.button>
         </div>
 
         {/* Filter Buttons */}
@@ -94,7 +158,10 @@ export default function Projects() {
             <motion.button
               key={status}
               className={`filter-btn ${filterStatus === status ? 'active' : ''}`}
-              onClick={() => setFilterStatus(status)}
+              onClick={() => {
+                setFilterStatus(status)
+                fetchProjects(searchTerm, status)
+              }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -109,25 +176,45 @@ export default function Projects() {
         <h2 className="section-title">
           {searchTerm ? `Results (${filteredProjects.length})` : 'All Projects'}
         </h2>
-        <span className="result-count">{filteredProjects.length} available</span>
+        <span className="result-count">
+          {loading ? 'Loading...' : `${filteredProjects.length} available`}
+        </span>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="error-banner">
+          <span>{error}</span>
+          <button onClick={() => fetchProjects(searchTerm, filterStatus)}>Retry</button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && !error && (
+        <LoadingSpinner message="Loading projects..." />
+      )}
+
       {/* Projects Grid */}
-      <motion.div 
-        className="projects-grid"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {filteredProjects.map((project) => (
-          <motion.div key={project.id} variants={itemVariants}>
-            <ProjectCard project={project} />
-          </motion.div>
-        ))}
-      </motion.div>
+      {!loading && !error && (
+        <motion.div 
+          className="projects-grid"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {filteredProjects.map((project) => (
+            <motion.div 
+              key={project.id}
+              variants={itemVariants}
+            >
+              <ProjectCard project={project} />
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
 
       {/* Empty State */}
-      {filteredProjects.length === 0 && (
+      {!loading && !error && filteredProjects.length === 0 && (
         <motion.div 
           className="empty-state"
           initial={{ opacity: 0, y: 20 }}
@@ -146,6 +233,7 @@ export default function Projects() {
             onClick={() => {
               setSearchTerm('')
               setFilterStatus('all')
+              fetchProjects('', 'all')
             }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}

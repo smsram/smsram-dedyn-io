@@ -1,35 +1,156 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { motion } from 'motion/react'
-import { Play, Share2, Calendar, Eye, ThumbsUp, ArrowLeft, Code, Download } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { 
+  Play, Share2, Calendar, Eye, ThumbsUp, ArrowLeft, Code, Github, 
+  Clock, Tag, BookOpen, ChevronDown, ChevronUp
+} from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { videosData, sourceCodesData } from '@/data/mockData'
+import Image from 'next/image'
+import LoadingSpinner from '@/app/components/ui/LoadingSpinner'
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL
+
+// Helper to extract YouTube video ID from various URL formats
+function extractYoutubeId(url) {
+  if (!url) return ''
+  const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/
+  const match = url.match(regex)
+  return match ? match[1] : ''
+}
 
 export default function VideoDetail() {
   const params = useParams()
   const id = params.id
-  const video = videosData.find(v => v.id === parseInt(id))
-  const [formattedDate, setFormattedDate] = useState('')
+  
+  const [video, setVideo] = useState(null)
+  const [relatedSourceCode, setRelatedSourceCode] = useState(null)
+  const [relatedVideos, setRelatedVideos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showFullDescription, setShowFullDescription] = useState(false)
 
-  // Format date on client only to avoid hydration mismatch
-  useEffect(() => {
-    if (video) {
-      const date = new Date(video.publishedDate)
-      setFormattedDate(date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      }))
+  // Parse topics from string to array
+  const topicsArray = useMemo(() => {
+    if (!video?.topics) return []
+    
+    // If topics is already a string, split by comma
+    if (typeof video.topics === 'string') {
+      return video.topics.split(',').map(t => t.trim()).filter(Boolean)
     }
-  }, [video])
+    
+    // If topics is a JSON string, parse it
+    try {
+      const parsed = JSON.parse(video.topics)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }, [video?.topics])
 
-  if (!video) {
+  // Format date
+  const formattedDate = useMemo(() => {
+    if (!video?.published_date) return ''
+    const date = new Date(video.published_date)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }, [video?.published_date])
+
+  // Description preview logic
+  const PREVIEW_LENGTH = 500
+  const isDescriptionLong = video?.full_description?.length > PREVIEW_LENGTH
+
+  const displayedDescription = useMemo(() => {
+    if (!video?.full_description) return ''
+    if (showFullDescription || !isDescriptionLong) {
+      return video.full_description
+    }
+    return video.full_description.substring(0, PREVIEW_LENGTH) + '...'
+  }, [video?.full_description, showFullDescription, isDescriptionLong])
+
+  useEffect(() => {
+    if (!id) return
+
+    const fetchVideoData = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        // Fetch main video details
+        const videoRes = await fetch(`${BASE_URL}/dashboard/videos/${id}`)
+        const videoData = await videoRes.json()
+        
+        if (!videoRes.ok || !videoData.success) {
+          throw new Error(videoData.error || 'Video not found')
+        }
+        
+        setVideo(videoData.data)
+
+        // Fetch related source code if it exists
+        if (videoData.data.has_source_code && videoData.data.source_code_id) {
+          try {
+            const scRes = await fetch(`${BASE_URL}/dashboard/source-codes/${videoData.data.source_code_id}`)
+            const scData = await scRes.json()
+            if (scData.success) {
+              setRelatedSourceCode(scData.data)
+            }
+          } catch (err) {
+            console.error('Error fetching source code:', err)
+          }
+        }
+
+        // Fetch related videos
+        try {
+          const relatedRes = await fetch(`${BASE_URL}/dashboard/videos/${id}/related`)
+          const relatedData = await relatedRes.json()
+          if (relatedData.success) {
+            setRelatedVideos(relatedData.data)
+          }
+        } catch (err) {
+          console.error('Error fetching related videos:', err)
+        }
+
+      } catch (err) {
+        console.error('Fetch error:', err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchVideoData()
+  }, [id])
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: video.title,
+        text: video.description,
+        url: window.location.href,
+      }).catch(err => console.log('Error sharing:', err))
+    } else {
+      navigator.clipboard.writeText(window.location.href)
+      alert('Link copied to clipboard!')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="video-detail-page loading-container">
+        <LoadingSpinner message="Loading video details..." />
+      </div>
+    )
+  }
+
+  if (error || !video) {
     return (
       <div className="video-detail-page">
         <div className="error-container">
-          <h2>Video not found</h2>
+          <h2>{error || 'Video not found'}</h2>
           <Link href="/dashboard/videos" className="back-link">
             <ArrowLeft size={16} />
             Back to Videos
@@ -38,14 +159,6 @@ export default function VideoDetail() {
       </div>
     )
   }
-
-  const relatedSourceCode = video.hasSourceCode 
-    ? sourceCodesData.find(sc => sc.id === video.sourceCodeId)
-    : null
-
-  const relatedVideos = videosData
-    .filter(v => v.id !== video.id && v.category === video.category)
-    .slice(0, 3)
 
   return (
     <div className="video-detail-page">
@@ -71,7 +184,7 @@ export default function VideoDetail() {
               <iframe
                 width="100%"
                 height="600"
-                src={`https://www.youtube.com/embed/${extractYoutubeId(video.youtubeUrl)}`}
+                src={`https://www.youtube.com/embed/${extractYoutubeId(video.youtube_url)}`}
                 title={video.title}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -84,43 +197,58 @@ export default function VideoDetail() {
           {/* Video Header */}
           <div className="video-detail-header">
             <h1 className="video-detail-title">{video.title}</h1>
-            <p className="video-detail-description">{video.description}</p>
+            {video.description && (
+              <p className="video-detail-description">{video.description}</p>
+            )}
 
             <div className="video-detail-meta">
               {formattedDate && (
                 <span className="meta-item">
                   <Calendar size={18} />
-                  Published: {formattedDate}
+                  {formattedDate}
                 </span>
               )}
               <span className="meta-item">
                 <Eye size={18} />
-                {video.views} views
+                {Number(video.views || 0).toLocaleString()} views
               </span>
               <span className="meta-item">
                 <ThumbsUp size={18} />
-                {video.likes} likes
+                {Number(video.likes || 0).toLocaleString()} likes
               </span>
+              {video.duration && (
+                <span className="meta-item">
+                  <Clock size={18} />
+                  {video.duration}
+                </span>
+              )}
             </div>
 
             <div className="video-actions-main">
-              <a 
-                href={video.youtubeUrl} 
+              <motion.a 
+                href={video.youtube_url} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="action-btn primary-btn"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
                 <Play size={18} />
                 Watch on YouTube
-              </a>
-              <button className="action-btn secondary-btn">
+              </motion.a>
+              <motion.button 
+                className="action-btn secondary-btn"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleShare}
+              >
                 <Share2 size={18} />
                 Share
-              </button>
+              </motion.button>
             </div>
           </div>
 
-          {/* Video Info Section */}
+          {/* Video Info Grid */}
           <motion.div 
             className="detail-section"
             initial={{ opacity: 0 }}
@@ -128,111 +256,202 @@ export default function VideoDetail() {
             transition={{ duration: 0.5 }}
             viewport={{ once: true }}
           >
-            <h2 className="section-title">Video Information</h2>
+            <h2 className="section-title">
+              <BookOpen size={24} />
+              Video Information
+            </h2>
             <div className="info-grid">
+              {video.category && (
+                <div className="info-item">
+                  <h3>Category</h3>
+                  <p>{video.category}</p>
+                </div>
+              )}
+              {video.level && (
+                <div className="info-item">
+                  <h3>Difficulty Level</h3>
+                  <p className={`level-badge level-${video.level.toLowerCase()}`}>
+                    {video.level}
+                  </p>
+                </div>
+              )}
+              {video.duration && (
+                <div className="info-item">
+                  <h3>Duration</h3>
+                  <p>{video.duration}</p>
+                </div>
+              )}
               <div className="info-item">
-                <h3>Duration</h3>
-                <p>{video.duration || 'N/A'}</p>
-              </div>
-              <div className="info-item">
-                <h3>Category</h3>
-                <p>{video.category || 'Web Development'}</p>
-              </div>
-              <div className="info-item">
-                <h3>Level</h3>
-                <p>{video.level || 'Beginner'}</p>
-              </div>
-              <div className="info-item">
-                <h3>Channel</h3>
-                <p>SMSRam</p>
+                <h3>Published</h3>
+                <p>{formattedDate || 'N/A'}</p>
               </div>
             </div>
           </motion.div>
 
           {/* Topics Covered */}
-          <motion.div 
-            className="detail-section"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="section-title">Topics Covered</h2>
-            <div className="topics-list">
-              {video.topics ? video.topics.map((topic, index) => (
-                <motion.div 
-                  key={index}
-                  className="topic-item"
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                  viewport={{ once: true }}
-                >
-                  <div className="topic-check">✓</div>
-                  <span>{topic}</span>
-                </motion.div>
-              )) : (
-                <p className="no-data">Topics information not available</p>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Source Code Related */}
-          {relatedSourceCode && (
+          {topicsArray.length > 0 && (
             <motion.div 
-              className="related-sourcecode-section"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
+              className="detail-section topics-section"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              viewport={{ once: true }}
             >
-              <h2 className="section-title">Related Source Code</h2>
-              <div className="related-sourcecode-card">
-                <div className="sourcecode-info">
-                  <Link href={`/dashboard/source-code/${relatedSourceCode.id}`} className="sourcecode-title-link">
-                    <h3 className="sourcecode-title">{relatedSourceCode.title}</h3>
-                  </Link>
-                  <p className="sourcecode-description">{relatedSourceCode.description}</p>
-
-                  <div className="sourcecode-tech">
-                    {relatedSourceCode.technologies.slice(0, 3).map((tech, idx) => (
-                      <span key={idx} className="tech-tag">{tech}</span>
-                    ))}
-                  </div>
-
-                  <div className="sourcecode-actions-related">
-                    <Link href={`/dashboard/source-code/${relatedSourceCode.id}`} className="action-btn view-btn">
-                      <Code size={16} />
-                      View Source Code
-                    </Link>
-                    {relatedSourceCode.downloadAvailable && (
-                      <button className="action-btn download-btn">
-                        <Download size={16} />
-                        Download
-                      </button>
-                    )}
-                  </div>
-                </div>
+              <h2 className="section-title">
+                <Tag size={24} />
+                Topics Covered
+              </h2>
+              <div className="topics-grid">
+                {topicsArray.map((topic, index) => (
+                  <motion.div 
+                    key={index}
+                    className="topic-card"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    viewport={{ once: true }}
+                    whileHover={{ scale: 1.05, y: -4 }}
+                  >
+                    <div className="topic-icon">✓</div>
+                    <span className="topic-text">{topic}</span>
+                  </motion.div>
+                ))}
               </div>
             </motion.div>
           )}
 
-          {/* Transcript Section */}
-          <motion.div 
-            className="detail-section"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="section-title">Video Description</h2>
-            <div className="transcript-content">
-              {video.fullDescription ? (
-                <p>{video.fullDescription}</p>
-              ) : (
-                <p className="no-data">Full description not available</p>
-              )}
-            </div>
-          </motion.div>
+          {/* Related Source Code */}
+          {relatedSourceCode && (
+            <motion.div 
+              className="related-sourcecode-section"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="section-title">
+                <Code size={24} />
+                Related Source Code
+              </h2>
+              <motion.div 
+                className="related-sourcecode-card"
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="sourcecode-info">
+                  <Link 
+                    href={`/dashboard/source-codes/${relatedSourceCode.id}`}
+                    className="sourcecode-title-link"
+                  >
+                    <h3 className="sourcecode-title">{relatedSourceCode.title}</h3>
+                  </Link>
+                  <p className="sourcecode-description">
+                    {relatedSourceCode.description}
+                  </p>
+
+                  {/* Technologies */}
+                  {relatedSourceCode.technologies && (
+                    <div className="sourcecode-tech">
+                      {(() => {
+                        try {
+                          const techs = typeof relatedSourceCode.technologies === 'string'
+                            ? JSON.parse(relatedSourceCode.technologies)
+                            : relatedSourceCode.technologies
+                          
+                          return Array.isArray(techs) 
+                            ? techs.slice(0, 5).map((tech, idx) => (
+                                <span key={idx} className="tech-tag">{tech}</span>
+                              ))
+                            : null
+                        } catch {
+                          return null
+                        }
+                      })()}
+                    </div>
+                  )}
+
+                  <div className="sourcecode-actions-related">
+                    <Link 
+                      href={`/dashboard/source-codes/${relatedSourceCode.id}`}
+                      className="action-btn view-btn"
+                    >
+                      <Code size={16} />
+                      View Source Code
+                    </Link>
+                    {relatedSourceCode.github_url && (
+                      <a 
+                        href={relatedSourceCode.github_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="action-btn github-btn"
+                      >
+                        <Github size={16} />
+                        GitHub
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Full Description with Show More/Less */}
+          {video.full_description && (
+            <motion.div 
+              className="detail-section description-section"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="section-title">
+                <BookOpen size={24} />
+                About This Video
+              </h2>
+              <div className="description-content">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={showFullDescription ? 'full' : 'preview'}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {displayedDescription.split('\n').map((paragraph, index) => (
+                      paragraph.trim() ? (
+                        <p key={index} className="description-paragraph">
+                          {paragraph}
+                        </p>
+                      ) : (
+                        <br key={index} />
+                      )
+                    ))}
+                  </motion.div>
+                </AnimatePresence>
+                
+                {isDescriptionLong && (
+                  <motion.button
+                    className="show-more-btn"
+                    onClick={() => setShowFullDescription(!showFullDescription)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {showFullDescription ? (
+                      <>
+                        <ChevronUp size={18} />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={18} />
+                        Show More
+                      </>
+                    )}
+                  </motion.button>
+                )}
+              </div>
+            </motion.div>
+          )}
 
           {/* Related Videos */}
           {relatedVideos.length > 0 && (
@@ -245,30 +464,50 @@ export default function VideoDetail() {
             >
               <h2 className="section-title">Related Videos</h2>
               <div className="related-videos-grid">
-                {relatedVideos.map((relatedVideo, index) => (
-                  <motion.div 
-                    key={relatedVideo.id}
-                    className="related-video-item"
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.1 }}
-                    viewport={{ once: true }}
-                    whileHover={{ y: -4 }}
-                  >
-                    <Link href={`/dashboard/videos/${relatedVideo.id}`} className="related-video-thumbnail">
-                      <img src={relatedVideo.thumbnail} alt={relatedVideo.title} />
-                      <div className="video-overlay">
-                        <Play size={32} />
-                      </div>
-                    </Link>
-                    <div className="related-video-info">
-                      <Link href={`/dashboard/videos/${relatedVideo.id}`}>
-                        <h3 className="related-video-title">{relatedVideo.title}</h3>
+                {relatedVideos.map((relatedVideo, index) => {
+                  const videoId = extractYoutubeId(relatedVideo.youtube_url)
+                  const thumbUrl = videoId 
+                    ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+                    : relatedVideo.thumbnail || '/images/video-fallback.jpg'
+                  
+                  return (
+                    <motion.div 
+                      key={relatedVideo.id}
+                      className="related-video-item"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: index * 0.1 }}
+                      viewport={{ once: true }}
+                      whileHover={{ y: -8 }}
+                    >
+                      <Link 
+                        href={`/dashboard/videos/${relatedVideo.id}`}
+                        className="related-video-thumbnail"
+                      >
+                        <Image 
+                          src={thumbUrl}
+                          alt={relatedVideo.title}
+                          width={320}
+                          height={180}
+                          className="related-video-img"
+                        />
+                        <div className="video-overlay">
+                          <div className="play-icon">
+                            <Play size={32} fill="white" />
+                          </div>
+                        </div>
                       </Link>
-                      <p className="related-video-meta">{relatedVideo.views} views</p>
-                    </div>
-                  </motion.div>
-                ))}
+                      <div className="related-video-info">
+                        <Link href={`/dashboard/videos/${relatedVideo.id}`}>
+                          <h3 className="related-video-title">{relatedVideo.title}</h3>
+                        </Link>
+                        <p className="related-video-meta">
+                          {Number(relatedVideo.views || 0).toLocaleString()} views
+                        </p>
+                      </div>
+                    </motion.div>
+                  )
+                })}
               </div>
             </motion.div>
           )}
@@ -276,12 +515,4 @@ export default function VideoDetail() {
       </motion.div>
     </div>
   )
-}
-
-// Helper function to extract YouTube video ID
-function extractYoutubeId(url) {
-  if (!url) return ''
-  const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/
-  const match = url.match(youtubeRegex)
-  return match ? match[1] : ''
 }
